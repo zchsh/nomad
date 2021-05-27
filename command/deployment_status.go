@@ -419,71 +419,73 @@ func (c *DeploymentStatusCommand) monitor(client *api.Client, deployID string, i
 		length = shortId
 	}
 
-	for {
-		deploy, meta, err := client.Deployments().Info(deployID, &q)
-		if err != nil {
-			c.Ui.Error(c.Colorize().Color("Error fetching deployment"))
-			return
-		}
+	ctx, cancel := context.WithCancel(context.Background())
 
-		status := deploy.Status
-		info := formatTime(time.Now())
-		info += fmt.Sprintf("\n%s", formatDeployment(client, deploy, length))
+	go func() {
+		defer cancel()
 
-		if verbose {
-			info += "\n\n[bold]Allocations[reset]\n"
-			allocs, _, err := client.Deployments().Allocations(deployID, nil)
+		for {
+			deploy, meta, err := client.Deployments().Info(deployID, &q)
 			if err != nil {
-				info += "Error fetching allocations"
-			} else {
-				info += formatAllocListStubs(allocs, verbose, length)
+				c.Ui.Error(c.Colorize().Color("Error fetching deployment"))
+				return
 			}
-		}
 
-		// Add newline before output to avoid prefix indentation when called from job run
-		msg := c.Colorize().Color(fmt.Sprintf("\n%s", info))
+			status := deploy.Status
+			info := formatTime(time.Now())
+			info += fmt.Sprintf("\n%s", formatDeployment(client, deploy, length))
 
-		// Print in place if tty
-		_, isStdoutTerminal := term.GetFdInfo(os.Stdout)
-		if isStdoutTerminal {
-			// fmt.Fprint(writer, msg)
-			d.Append(
-				glint.TextFunc(func(row, cols uint) string {
-					return msg
-				}),
-			)
-		} else {
-			c.Ui.Output(msg)
-		}
-
-		switch status {
-		case structs.DeploymentStatusFailed:
-			if hasAutoRevert(deploy) {
-				// Wait for rollback to launch
-				time.Sleep(1 * time.Second)
-				rollback, _, err := client.Jobs().LatestDeployment(deploy.JobID, nil)
-
+			if verbose {
+				info += "\n\n[bold]Allocations[reset]\n"
+				allocs, _, err := client.Deployments().Allocations(deployID, nil)
 				if err != nil {
-					c.Ui.Error(c.Colorize().Color("Error fetching deployment of previous job version"))
-					return
+					info += "Error fetching allocations"
+				} else {
+					info += formatAllocListStubs(allocs, verbose, length)
 				}
-				c.Ui.Output("") // Separate rollback monitoring from failed deployment
-				c.monitor(client, rollback.ID, index, verbose)
 			}
-			return
 
-		case structs.DeploymentStatusSuccessful:
-		case structs.DeploymentStatusCancelled:
-		case structs.DeploymentStatusBlocked:
-			return
-		default:
-			q.WaitIndex = meta.LastIndex
-			continue
+			// Add newline before output to avoid prefix indentation when called from job run
+			msg := c.Colorize().Color(fmt.Sprintf("\n%s", info))
+
+			// Print in place if tty
+			_, isStdoutTerminal := term.GetFdInfo(os.Stdout)
+			if isStdoutTerminal {
+				// fmt.Fprint(writer, msg)
+				d.Set(
+					glint.TextFunc(func(row, cols uint) string {
+						return msg
+					}),
+				)
+			} else {
+				c.Ui.Output(msg)
+			}
+
+			switch status {
+			case structs.DeploymentStatusFailed:
+				if hasAutoRevert(deploy) {
+					// Wait for rollback to launch
+					time.Sleep(1 * time.Second)
+					rollback, _, err := client.Jobs().LatestDeployment(deploy.JobID, nil)
+
+					if err != nil {
+						c.Ui.Error(c.Colorize().Color("Error fetching deployment of previous job version"))
+						return
+					}
+					c.Ui.Output("") // Separate rollback monitoring from failed deployment
+					c.monitor(client, rollback.ID, index, verbose)
+				}
+				return
+
+			case structs.DeploymentStatusSuccessful, structs.DeploymentStatusCancelled, structs.DeploymentStatusBlocked:
+				return
+			default:
+				q.WaitIndex = meta.LastIndex
+				continue
+			}
 		}
 
-		d.Render(context.Background())
-		context.Background().Done()
-		// writer.Stop()
-		return
-	}
+	}()
+
+	d.Render(ctx)
 }
