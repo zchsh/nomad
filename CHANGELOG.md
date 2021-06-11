@@ -2,6 +2,7 @@
 
 IMPROVEMENTS:
 * cli: Added `-monitor` flag to `deployment status` command and automatically monitor deployments from `job run` command. [[GH-10661](https://github.com/hashicorp/nomad/pull/10661)]
+* cli: Added remainder of available pprof profiles to `nomad operator debug` capture. [[GH-10748](https://github.com/hashicorp/nomad/issues/10748)]
 
 ## 1.1.1 (June 9, 2021)
 
