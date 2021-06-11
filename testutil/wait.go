@@ -232,7 +232,7 @@ func WaitForRunning(t testing.TB, rpc rpcFn, job *structs.Job) []*structs.AllocL
 }
 
 // WaitForFiles blocks until all the files in the slice are present
-func WaitForFiles(t testing.T, files []string) {
+func WaitForFiles(t testing.TB, files []string) {
 	WaitForResult(func() (bool, error) {
 		return FilesExist(files), nil
 	}, func(err error) {
@@ -241,7 +241,7 @@ func WaitForFiles(t testing.T, files []string) {
 }
 
 // WaitForFilesUntil blocks until duration or all the files in the slice are present
-func WaitForFilesUntil(t testing.T, files []string, until time.Duration) {
+func WaitForFilesUntil(t testing.TB, files []string, until time.Duration) {
 	WaitForResultUntil(until, func() (bool, error) {
 		return FilesExist(files), nil
 	}, func(err error) {
